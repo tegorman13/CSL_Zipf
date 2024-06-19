@@ -1,0 +1,652 @@
+---
+title: "csl_zipf_pilot2"
+author: "Thomas Gorman"
+date: "4/22/2020"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+library(ez) #for doing the ANOVAs
+library(plyr)
+library(dplyr) # great library for massaging data
+library(sciplot) # for the bar chart and line graph with error bars
+library(ggplot2)
+library(magrittr) # to allow pipelines
+library (car) # for special recode
+library(psych)
+library(tidyr)
+library(emdbook) 
+library(hexbin)
+library(cluster)
+library(Matrix)
+library(lm.beta)
+library(leaps)
+library(caret)
+source("http://personality-project.org/r/useful.r")
+detach("package:dplyr", character.only = TRUE)
+library("dplyr", character.only = TRUE)
+library(glmnet)
+
+
+
+dr = read.csv("csl_data14.csv")
+
+dt <-  filter(dr,!(trial_index>2 & image1=="NULL")) # filter out fixation and other unnecessary rows
+
+#dt <- dt[-c(238:474),] # remove 2nd run from sbj who did the experiment twice
+
+dt <- filter(dt,!(subjectID==46346)) # somehow did study 2 times, this excludes 2nd run
+
+dt <- dt %>% select(subjectID:rt,image1:image6,answer:key_press,time_elapsed)
+
+
+
+35809 %in% dt$subjectID
+
+extractString <- function(string){
+  
+  pos1 = gregexpr('/',string)
+  keep = substr(string,pos1[[1]][1]+1,pos1[[1]][2]-1)
+  return(keep)
+}
+
+
+dTest <- dt %>% filter(stage=="test1" | stage=="test2" | stage=="test3")
+
+dTest <- dTest %>% rowwise() %>% mutate(img1_c=extractString(image1),img2_c=extractString(image2),img3_c=extractString(image3),img4_c=extractString(image4),img5_c=extractString(image5),img6_c=extractString(image6)) %>% ungroup()
+
+dTest$corAnswerCat <- ifelse(dTest$answer=="car","cars",ifelse(dTest$answer=="dog","animals",ifelse(dTest$answer=="kitchen","dishware",ifelse(dTest$answer=="insect","insects",as.character(dTest$answer)))))
+
+dTest$sbjAnswerCat <- ifelse(dTest$key_press=="49",dTest$img1_c,ifelse(dTest$key_press=="50",dTest$img2_c,ifelse(dTest$key_press=="51",dTest$img3_c,ifelse(dTest$key_press=="52",dTest$img4_c,ifelse(dTest$key_press=="53",dTest$img5_c,ifelse(dTest$key_press=="54",dTest$img6_c,"idk"))))))
+
+dTest$Correct = ifelse(dTest$sbjAnswerCat==dTest$corAnswerCat,TRUE,FALSE)
+dTest$idkTrial = ifelse(dTest$sbjAnswerCat=="idk",TRUE,FALSE)
+
+
+dTest$assignedCond <- factor(dTest$assignedCond, levels = c("Zipf", "Unf", "mixed"))
+dTest$trialType <- factor(dTest$trialType, levels = c("test-repeat", "test-novel", "test-gener"))
+dTest$answerFreq=factor(dTest$answerFreq,levels=c("1","3","5","11"))
+
+
+
+dTest=dTest %>% select(-conditOrder)
+
+#dGood = dt %>% filter(!(subjectID %in% dSoftSbj))
+dConditOrder = dt %>% filter(trial_index==2) %>% select(subjectID,conditOrder)
+
+dTestAll=merge(dTest,dConditOrder,by=c("subjectID"))
+
+
+```
+
+
+
+
+
+# Test above chance
+```{r, include=FALSE, echo=FALSE}
+exclusionCriteria="harsh"
+#exclusionCriteria="soft"
+
+
+#dPerf = dTest %>% group_by(subjectID,stage,trialType) %>% filter(trialType=="test-repeat" | trialType=="test-novel") %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE)) 
+dPerf = dTestAll %>% group_by(subjectID,stage,trialType) %>% filter(trialType=="test-repeat") %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE)) 
+dPerf = dPerf%>% mutate(acc=ncor/(ncor+nwrong))
+dPerf = dPerf %>% group_by(subjectID) %>%mutate(aboveChance = acc>=.167,highIdk=nidk>19,nBadStage=sum(aboveChance==FALSE),dBest=max(acc))
+
+
+
+
+dHarshExc= dPerf %>% filter(aboveChance==FALSE | highIdk==TRUE)
+dHarshSbj = unique(dHarshExc$subjectID)
+
+dHarsh = dTestAll %>% filter(!(subjectID %in% dHarshSbj))
+
+
+
+
+
+
+dSoft =  dPerf %>% filter(highIdk==TRUE | nBadStage>3)
+
+
+dSoftSbj = unique(dSoft$subjectID)
+
+dTest3 = dTestAll %>% filter(!(subjectID %in% dSoftSbj))
+
+# sbjCodes <- unique(dTest3$subjectID)
+# paste("Total Subjects excluded with soft criteria:", length(dSoftSbj))
+# paste("Total Subjects remaining:", length(sbjCodes))
+#   
+  
+  
+dPerf2 = dTest3 %>% group_by(subjectID,stage,trialType) %>% filter(trialType=="test-repeat" | trialType=="test-novel") %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE)) 
+dPerf2 = dPerf2%>% mutate(acc=ncor/(ncor+nwrong))
+dPerf2 = dPerf2 %>% group_by(subjectID) %>%mutate(aboveChance = acc>=.167,highIdk=nidk>19,nBadStage=sum(aboveChance==FALSE),dBest=max(acc))
+  
+  
+dNovel = dTest3 %>% group_by(subjectID,stage) %>% filter(trialType=="test-repeat") %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE)) 
+dNovel = dPerf%>% mutate(acc=ncor/(ncor+nwrong))
+dNovel = dPerf %>% group_by(subjectID) %>%mutate(aboveChance = acc>=.167,highIdk=nidk>19,nBadStage=sum(aboveChance==FALSE),dBest=max(acc))  
+  
+
+
+
+check = dTest %>% group_by(subjectID,day) %>% summarise(n=n())
+check = filter(check, n>144)
+
+
+dTest = dTestAll
+
+counts = dTest %>% ungroup() %>% group_by(assignedCond,phase,subjectID) %>% summarise(n=n())
+counts = counts %>% ungroup() %>% group_by(assignedCond,phase) %>% summarise(n=n())
+counts
+```
+
+
+
+
+
+
+
+```{r, echo=FALSE}
+
+sbjCodesRaw <- unique(dTestAll$subjectID)
+sbjCodes <- unique(dHarsh$subjectID)
+paste("Total Subjects before any exclusions:", length(sbjCodesRaw))
+paste("Total Subjects excluded for below chance performance in any of the 3 test-repeat phases:", length(dHarshSbj))
+paste("Total Subjects remaining for analyses:", length(sbjCodes))
+
+
+
+```
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+#Time data
+
+grpTrainTime <- dt %>%filter(image1!="NULL",stage=="train1" | stage=="train2" | stage=="train3")  %>% group_by(subjectID,stage) %>% summarise(totalTime=max(time_elapsed)/60000,rtAvg=mean(rt),rtStd=sd(rt)) %>% ungroup() %>% group_by(stage) %>% summarise(stageTimeAvg=mean(totalTime),stageTimeStdv=sd(totalTime),rtMean=mean(rtAvg),rtStd=mean(rtStd)) 
+
+
+sbjTrainTime <- dt %>%filter(image1!="NULL",stage=="train1" | stage=="train2" | stage=="train3")  %>% group_by(subjectID,stage) %>% summarise(totalTime=max(time_elapsed)/60000,rtAvg=mean(rt)) 
+
+
+
+sdTrainTime <- dt %>%filter(image1!="NULL",stage=="train1" | stage=="train2" | stage=="train3")  %>% group_by(subjectID) %>% summarise(sdTime=sd(time_elapsed)/60000) %>% ungroup(subjectID) %>% summarise(mean(sdTime)) %>% as.numeric()
+
+avgExptTime <- dt %>%filter(image1!="NULL")  %>% group_by(subjectID) %>% summarise(totalTime=max(time_elapsed)/60000) %>%ungroup(subjectID) %>% summarise(mean(totalTime)) %>% as.numeric()
+
+sdExptTime <- dt %>%filter(image1!="NULL")  %>% group_by(subjectID) %>% summarise(sdTime=sd(time_elapsed)/60000) %>%ungroup(subjectID) %>% summarise(mean(sdTime)) %>% as.numeric()
+
+
+sbjExptTime = dt %>%filter(image1!="NULL") %>% group_by(subjectID) %>%summarise(totalTime=max(time_elapsed)/60000) 
+
+trainRt <-dt %>% filter(image1!="NULL",stage=="train1" | stage=="train2" | stage=="train3") %>% group_by(subjectID) %>% summarise(n=n(),stageElapsed=max(time_elapsed)/60000,medTrainRt=median(rt),sdTrainRt=sd(rt),maxTrainRt=max(rt),trainSumRt=sum(rt))
+
+
+sbjRt <- dt %>%filter(image1!="NULL") %>% group_by(subjectID,stage) %>%summarise(n=n(),stageElapsed=max(time_elapsed)/60000,meanStageRt=mean(rt),sdStageRt=sd(rt),maxStageRt=max(rt),stageSumRt=sum(rt)) %>% group_by(subjectID) %>% mutate(totalTime=max(stageElapsed),outlier=max(stageElapsed)>=(avgExptTime+(2.5*sdExptTime)))
+
+stageRt <- dt %>%filter(image1!="NULL") %>% group_by(stage) %>%summarise(n=n(),stageElapsed=max(time_elapsed)/60000,meanStageRt=mean(rt),sdStageRt=sd(rt),maxStageRt=max(rt),stageSumRt=sum(rt)) 
+
+sbjRt %>% ggplot(aes(x=stage,y=stageSumRt))+geom_boxplot()
+
+
+
+
+nTrials= dt %>%group_by(subjectID,stage) %>% summarise(n=n())
+
+
+# Find subject IDs that with repetitive keystrokes at test
+repetitiveThresh <- 2.5 # number of standard deviations for repetitiveness
+
+repetitiveSD <- dTest %>% 
+  filter(key_press!=55) %>% 
+  group_by(subjectID, key_press) %>% 
+  summarise(n =n()) %>% 
+  group_by(subjectID) %>% 
+  mutate(freq = n/sum(n)) %>% 
+  group_by(subjectID) %>% 
+  filter(freq==max(freq)) %>% 
+  ungroup(subjectID) %>% 
+  summarise(stdev=sd(freq))
+
+notTooRepetitive <- dTest %>% 
+  filter(key_press!=55) %>% 
+  group_by(subjectID, key_press) %>% 
+  summarise(n =n()) %>% 
+  group_by(subjectID) %>% 
+  mutate(freq = n/sum(n)) %>% 
+  group_by(subjectID) %>% 
+  filter(freq==max(freq)) %>% 
+  mutate(extreme = (freq-.167)<=repetitiveSD*repetitiveThresh) %>% 
+  filter(extreme) %>% 
+  select(subjectID) %>%
+  distinct(subjectID)
+
+TooRepetitive <- dTest %>% 
+  filter(key_press!=55) %>% 
+  group_by(subjectID, key_press) %>% 
+  summarise(n =n()) %>% 
+  group_by(subjectID) %>% 
+  mutate(freq = n/sum(n)) %>% 
+  group_by(subjectID) %>% 
+  filter(freq==max(freq)) %>% 
+  mutate(extreme = (freq-.167)>repetitiveSD*repetitiveThresh) %>% 
+  filter(extreme) %>% 
+  select(subjectID) %>%
+  distinct(subjectID)
+
+
+
+
+
+
+
+minMedRT <- 500
+minRT <- 250
+maxRT <- 5000
+
+
+
+```
+
+
+
+
+# Looking At the Effect of Testing Phase 
+
+```{r, echo=FALSE}
+dPhase= dHarsh %>% group_by(subjectID,phase,trialType) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dPhase= dPhase %>% mutate(acc=ncor/(ncor+nwrong),aboveChance = acc>=.167)
+
+#dCond %>% ggplot(aes(x=assignedCond,y=acc,col=trialType))+geom_boxplot()
+
+
+
+
+dodge <- position_dodge(width = 0.9)
+dPhase%>% ggplot(aes(x=phase,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("testing phase")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) + ggtitle("Accuracy by phase and trial type")
+
+
+```
+
+
+
+
+
+# Comparing The 3 conditions
+
+### Some sbjs get removed for having non-finite values for accuracy - when they answered "I don't know" to every option
+
+```{r, echo=FALSE}
+dCond = dHarsh %>% group_by(subjectID,assignedCond,trialType) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCond = dCond %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+dodge <- position_dodge(width = 0.9)
+dCond%>% ggplot(aes(x=assignedCond,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) +
+ggtitle(".                        Accuracy by condition and trial type (collapsed across phase)")
+
+
+
+
+dCond = dHarsh %>% filter(phase==1) %>% group_by(subjectID,assignedCond,trialType) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCond = dCond %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+dodge <- position_dodge(width = 0.9)
+dCond%>% ggplot(aes(x=assignedCond,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) +ggtitle("Accuracy by condition and trial type only phase 1")
+
+
+dCond = dHarsh %>% filter(phase==2 | phase==3) %>% group_by(subjectID,assignedCond,trialType) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCond = dCond %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+dodge <- position_dodge(width = 0.9)
+dCond%>% ggplot(aes(x=assignedCond,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) +ggtitle(".     Accuracy by condition and trial type - only phase 2 and 3")
+
+
+
+
+```
+
+
+
+
+
+
+
+
+# Condition and Phase compared together
+
+```{r, echo=FALSE}
+dCondPhaseRpt= dHarsh %>% filter(trialType=="test-repeat") %>%group_by(subjectID,phase,trialType,assignedCond) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCondPhaseRpt= dCondPhaseRpt %>% mutate(acc=ncor/(ncor+nwrong))
+
+dodge <- position_dodge(width = 0.9)
+dCondPhaseRpt %>% ggplot(aes(x=assignedCond,y=acc,group=phase,fill=phase))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Testing Phase"))+theme(legend.title.align=.25) +ggtitle("Repeat item accuracy by condition and phase")
+
+
+
+
+dCondPhaseNovel= dHarsh %>% filter(trialType=="test-novel") %>%group_by(subjectID,phase,trialType,assignedCond) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCondPhaseNovel= dCondPhaseNovel %>% mutate(acc=ncor/(ncor+nwrong))
+
+dCondPhaseNovel %>% ggplot(aes(x=assignedCond,y=acc,group=phase,fill=phase))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Testing Phase"))+theme(legend.title.align=.25) +ggtitle("Novel item accuracy by condition and phase")
+
+
+dCondPhaseGen= dHarsh %>% filter(trialType=="test-gener") %>%group_by(subjectID,phase,trialType,assignedCond) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCondPhaseGen= dCondPhaseGen %>% mutate(acc=ncor/(ncor+nwrong))
+
+dCondPhaseGen %>% ggplot(aes(x=assignedCond,y=acc,group=phase,fill=phase))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Testing Phase"))+theme(legend.title.align=.25) +ggtitle("Generalization item accuracy by condition and phase")
+
+
+
+dCondPhase= dHarsh %>% group_by(subjectID,phase,trialType,assignedCond) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE )) 
+dCondPhase= dCondPhase %>% mutate(acc=ncor/(ncor+nwrong))
+
+dodge <- position_dodge(width = 0.9)
+dCondPhase %>% ggplot(aes(x=phase,y=acc,group=assignedCond,fill=assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+facet_wrap(.~as.factor(trialType))+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("test phase")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Condition"))+theme(legend.title.align=.25) +ggtitle("Accuracy by condition, phase and trial type, visual 1/3")
+
+
+
+dodge <- position_dodge(width = 0.9)
+dCondPhase %>% ggplot(aes(x=assignedCond,y=acc,group=phase,fill=phase))+geom_bar(stat="summary",position=dodge,fun.y="mean")+facet_wrap(.~as.factor(trialType))+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Testing Phase"))+theme(legend.title.align=.25) +ggtitle("Accuracy by condition, phase and trial type, visual 2/3")
+
+dodge <- position_dodge(width = 0.9)
+dCondPhase %>% ggplot(aes(x=trialType,y=acc,group=assignedCond,fill=assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+facet_wrap(.~as.factor(phase))+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Trial Type")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Condition"))+theme(legend.title.align=.25) +ggtitle("Accuracy by condition, phase and trial type, visual 3/3")
+  
+
+```
+
+
+
+
+
+
+
+
+# Condition Order Comparison - 6 possible orders of doing the 3 training conditions
+
+```{r, echo=FALSE}
+dOrder= dHarsh %>% group_by(subjectID,conditOrder,trialType,phase,assignedCond) %>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nIdk=sum(idkTrial==TRUE),n=n()) 
+dOrder= dOrder %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+#dCond %>% ggplot(aes(x=assignedCond,y=acc,col=trialType))+geom_boxplot()
+orderCount = dHarsh %>% ungroup() %>% group_by(conditOrder,subjectID) %>% summarise(n=n())
+#orderCount = orderCount %>% ungroup() %>% group_by(conditOrder) %>% summarise(n=n())
+
+
+orderCount %>% ggplot(aes(x=conditOrder,fill=conditOrder))+geom_bar(stat="count")+geom_text(stat='count', aes(label=..count..), vjust=-.1) +ggtitle("# of Sbj in each order permutation, 1=zipf,2=unf,3=mixed")
+
+dodge <- position_dodge(width = 0.9)
+dOrder%>% ggplot(aes(x=conditOrder,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Order of Conditions")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) +ggtitle("Accuracy by order and trial type, 1=zipf,2=unf,3=mixed")
+
+
+
+dOrder%>% ggplot(aes(x=phase,y=acc,group=trialType,fill=trialType))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+facet_wrap(.~as.factor(conditOrder))+ylab("% correct") +xlab("testing phase")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Test Trial Type"))+theme(legend.title.align=.25) +ggtitle("Accuracy by order and trial type, 1=zipf,2=unf,3=mixed")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+# standardize performance by phase
+
+
+# phase 1
+dHarsh1 = dHarsh %>% filter(phase==1) %>% group_by(subjectID,phase,trialType,assignedCond)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+dHarsh1 = dHarsh1 %>% mutate(acc=ncor/(ncor+nwrong))
+
+meanRpt = dHarsh1 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdRpt = dHarsh1 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanNovel = dHarsh1 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdNovel= dHarsh1 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanGen= dHarsh1 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdGen= dHarsh1 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+
+dHarsh1Rpt = dHarsh1 %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p1_repeat_zAcc = (acc-meanRpt)/sdRpt)
+dHarsh1Novel = dHarsh1 %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p1_novel_zAcc = (acc-meanNovel)/sdNovel)
+dHarsh1Gen = dHarsh1 %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p1_gen_zAcc = (acc-meanGen)/sdGen)
+
+
+phase1z = merge(dHarsh1Rpt,dHarsh1Novel,by=c("subjectID","phase")) 
+phase1z = merge(phase1z,dHarsh1Gen,by=c("subjectID","phase")) %>% select(subjectID,phase,assignedCond,p1_repeat_zAcc,p1_novel_zAcc,p1_gen_zAcc)
+phase1z$p1_assignedCond <- phase1z$assignedCond
+phase1z <- phase1z %>% select(-assignedCond)
+
+
+# phase 2
+
+dHarsh2 = dHarsh %>% filter(phase==2) %>% group_by(subjectID,phase,trialType,assignedCond)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+dHarsh2 = dHarsh2 %>% mutate(acc=ncor/(ncor+nwrong))
+
+meanRpt = dHarsh2 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdRpt = dHarsh2 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanNovel = dHarsh2 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdNovel= dHarsh2 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanGen= dHarsh2 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdGen= dHarsh2 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+
+dHarsh2Rpt = dHarsh2 %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p2_repeat_zAcc = (acc-meanRpt)/sdRpt)
+dHarsh2Novel = dHarsh2 %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p2_novel_zAcc = (acc-meanNovel)/sdNovel)
+dHarsh2Gen = dHarsh2 %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p2_gen_zAcc = (acc-meanGen)/sdGen)
+
+
+phase2z = merge(dHarsh2Rpt,dHarsh2Novel,by=c("subjectID","phase")) 
+phase2z = merge(phase2z,dHarsh2Gen,by=c("subjectID","phase")) %>% select(subjectID,phase,assignedCond,p2_repeat_zAcc,p2_novel_zAcc,p2_gen_zAcc)
+phase2z$p2_assignedCond <- phase2z$assignedCond
+phase2z <- phase2z %>% select(-assignedCond)
+
+
+
+# phase 3
+dHarsh3 = dHarsh %>% filter(phase==3) %>% group_by(subjectID,phase,trialType,assignedCond)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+dHarsh3 = dHarsh3 %>% mutate(acc=ncor/(ncor+nwrong))
+
+meanRpt = dHarsh3 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdRpt = dHarsh3 %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanNovel = dHarsh3 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdNovel= dHarsh3 %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanGen= dHarsh3 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(mean(acc,na.rm=TRUE)) %>% as.numeric()
+sdGen= dHarsh3 %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(sd(acc,na.rm=TRUE)) %>% as.numeric()
+
+
+dHarsh3Rpt = dHarsh3 %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p3_repeat_zAcc = (acc-meanRpt)/sdRpt)
+dHarsh3Novel = dHarsh3 %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p3_novel_zAcc = (acc-meanNovel)/sdNovel)
+dHarsh3Gen = dHarsh3 %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(p3_gen_zAcc = (acc-meanGen)/sdGen)
+
+
+phase3z = merge(dHarsh3Rpt,dHarsh3Novel,by=c("subjectID","phase")) 
+phase3z = merge(phase3z,dHarsh3Gen,by=c("subjectID","phase")) %>% select(subjectID,phase,assignedCond,p3_repeat_zAcc,p3_novel_zAcc,p3_gen_zAcc)
+phase3z$p3_assignedCond <- phase3z$assignedCond
+phase3z <- phase3z %>% select(-assignedCond)
+
+
+
+
+
+# Overall 
+
+dHarshAll = dHarsh  %>% group_by(subjectID,trialType)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+dHarshAll = dHarshAll %>% mutate(acc=ncor/(ncor+nwrong))
+
+meanRpt = dHarshAll %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdRpt = dHarshAll %>% ungroup() %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanNovel = dHarshAll %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(mean(acc)) %>% as.numeric()
+sdNovel= dHarshAll %>% ungroup() %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% summarise(sd(acc)) %>% as.numeric()
+
+meanGen= dHarshAll %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(mean(acc,na.rm=TRUE)) %>% as.numeric()
+sdGen= dHarshAll %>% ungroup() %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% summarise(sd(acc,na.rm=TRUE)) %>% as.numeric()
+
+
+dHarshAllRpt = dHarshAll %>% filter(trialType=="test-repeat",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(all_repeat_zAcc = (acc-meanRpt)/sdRpt)
+dHarshAllNovel = dHarshAll %>% filter(trialType=="test-novel",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(all_novel_zAcc = (acc-meanNovel)/sdNovel)
+dHarshAllGen = dHarshAll %>% filter(trialType=="test-gener",(ncor+nwrong)>0) %>% group_by(subjectID) %>% mutate(all_gen_zAcc = (acc-meanGen)/sdGen)
+
+
+globalz = merge(dHarshAllRpt,dHarshAllNovel,by=c("subjectID")) 
+globalz  = merge(globalz,dHarshAllGen,by=c("subjectID")) %>% select(subjectID,all_repeat_zAcc,all_novel_zAcc,all_gen_zAcc)
+
+
+
+```
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+dHarshz = merge(phase1z,phase2z,by=c("subjectID"))
+dHarshz = merge(dHarshz ,phase3z,by=c("subjectID"))
+
+
+
+
+
+dHarshz$bestRptCond = ifelse((dHarshz$p1_repeat_zAcc>dHarshz$p2_repeat_zAcc & dHarshz$p1_repeat_zAcc>dHarshz$p3_repeat_zAcc),as.character(dHarshz$p1_assignedCond),
+                            ifelse((dHarshz$p2_repeat_zAcc>dHarshz$p1_repeat_zAcc & dHarshz$p2_repeat_zAcc>dHarshz$p3_repeat_zAcc),as.character(dHarshz$p2_assignedCond),
+                                   as.character(dHarshz$p3_assignedCond)))
+
+
+dHarshz$bestRptPhase = ifelse((dHarshz$p1_repeat_zAcc>dHarshz$p2_repeat_zAcc & dHarshz$p1_repeat_zAcc>dHarshz$p3_repeat_zAcc),1,
+                            ifelse((dHarshz$p2_repeat_zAcc>dHarshz$p1_repeat_zAcc & dHarshz$p2_repeat_zAcc>dHarshz$p3_repeat_zAcc),2,3))
+
+
+dHarshz$bestNovelCond = ifelse((dHarshz$p1_novel_zAcc>dHarshz$p2_novel_zAcc & dHarshz$p1_novel_zAcc>dHarshz$p3_novel_zAcc),as.character(dHarshz$p1_assignedCond),
+                            ifelse((dHarshz$p2_novel_zAcc>dHarshz$p1_novel_zAcc & dHarshz$p2_novel_zAcc>dHarshz$p3_novel_zAcc),as.character(dHarshz$p2_assignedCond),
+                                   as.character(dHarshz$p3_assignedCond)))
+
+
+dHarshz$bestNovelPhase = ifelse((dHarshz$p1_novel_zAcc>dHarshz$p2_novel_zAcc & dHarshz$p1_novel_zAcc>dHarshz$p3_novel_zAcc),1,
+                            ifelse((dHarshz$p2_novel_zAcc>dHarshz$p1_novel_zAcc & dHarshz$p2_novel_zAcc>dHarshz$p3_novel_zAcc),2,3))
+
+
+
+
+
+
+
+
+
+
+bestRpt = dHarshz %>% group_by(bestRptCond) %>% summarise(n=n())
+bestNovel = dHarshz %>% group_by(bestNovelCond) %>% summarise(n=n())
+
+bestRptPhase = dHarshz %>% group_by(bestRptPhase) %>% summarise(n=n())
+bestNovelPhase = dHarshz %>% group_by(bestNovelPhase) %>% summarise(n=n())
+
+
+```
+
+
+
+
+# Performance when controlling for the effect of phase - Z scores
+### I take the overall average and strd deviation for each phase, then compute how many standard devaition units each condition is above or below that average
+```{r, echo=FALSE}
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p1_assignedCond,y=p1_repeat_zAcc,fill=p1_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 1 Condition"))+theme(legend.title.align=.25)  +ggtitle(".              Repeat Performance Compared to Overall Phase 1 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p1_assignedCond,y=p1_novel_zAcc,fill=p1_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 1 Condition"))+theme(legend.title.align=.25)  +ggtitle(".              Novel Performance Compared to Overall Phase 1 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p1_assignedCond,y=p1_gen_zAcc,fill=p1_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 1 Condition"))+theme(legend.title.align=.25)  +ggtitle(".              Generalization Performance Compared to Overall Phase 1 Average")
+
+
+
+
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p2_assignedCond,y=p2_repeat_zAcc,fill=p2_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 2 Condition"))+theme(legend.title.align=.25)  +ggtitle(".             Repeat Performance Compared to Overall Phase 2 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p2_assignedCond,y=p2_novel_zAcc,fill=p2_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 2 Condition"))+theme(legend.title.align=.25)  +ggtitle(".           Novel Performance Compared to Overall Phase 2 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p2_assignedCond,y=p2_gen_zAcc,fill=p2_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 2 Condition"))+theme(legend.title.align=.25)  +ggtitle(".            Generalization Performance Compared to Overall Phase 2 Average")
+
+
+
+
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p3_assignedCond,y=p3_repeat_zAcc,fill=p3_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 3 Condition"))+theme(legend.title.align=.25)  +ggtitle(".             Repeat Performance Compared to Overall Phase 3 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p3_assignedCond,y=p3_novel_zAcc,fill=p3_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 3 Condition"))+theme(legend.title.align=.25)  +ggtitle(".             Novel Performance Compared to Global Overall 3 Average")
+
+dHarshz %>% group_by(subjectID) %>% ggplot(aes(x=p3_assignedCond,y=p3_gen_zAcc,fill=p3_assignedCond))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("Accuracy Z Score") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Phase 3 Condition"))+theme(legend.title.align=.25)  +ggtitle(".             Generalization Performance Compared to Overall Phase 3 Average")
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+
+dZipf = dHarsh %>% filter(assignedCond=="Zipf",trialType=="test-repeat") %>% group_by(answerFreq,subjectID)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+                         
+dZipf= dZipf %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+
+dodge <- position_dodge(width = 0.9)
+dZipf%>% ggplot(aes(x=answerFreq,y=acc,fill=answerFreq))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Frequency that item occurred during training"))+theme(legend.title.align=.25) +ylim(0,1) +ggtitle("Zipf test accuracy on repeat items")
+
+
+
+
+```
+
+
+
+
+
+
+```{r, include=FALSE, echo=FALSE}
+
+dMixed= dHarsh %>% filter(assignedCond=="mixed",trialType=="test-repeat") %>% group_by(answerFreq,subjectID)%>% summarise(ncor=sum(Correct==TRUE),nwrong=sum((Correct==FALSE) & idkTrial==FALSE ),nidk=sum(idkTrial==TRUE))
+                         
+dMixed= dMixed %>% mutate(acc=ncor/(ncor+nwrong))
+
+
+
+dodge <- position_dodge(width = 0.9)
+dMixed%>% ggplot(aes(x=answerFreq,y=acc,fill=answerFreq))+geom_bar(stat="summary",position=dodge,fun.y="mean")+ stat_summary(fun.data=mean_se,geom="errorbar",position=dodge,width=.5)+ylab("% correct") +xlab("Condition")+theme(plot.title = element_text(hjust = 0.5))+guides(fill=guide_legend(title="Frequency that item occurred during training"))+theme(legend.title.align=.25)+ggtitle("Mixed condition, accuracy by training freq")
+
+
+
+
+```
+
+
+

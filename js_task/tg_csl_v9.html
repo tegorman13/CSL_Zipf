@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<meta charset="utf-8"/>
+<html>
+    <head>
+        <title>My experiment</title>
+        <script src="jsPsych-master/jspsych.js"></script>
+        <script src="jsPsych-master/jspsych-instructions.js"></script>
+        <script src="jsPsych-master/jspsych-psychophysics.js"></script>
+        <script src="jsPsych-master/jspsych-html-button-response.js"></script>
+        <script src="jsPsych-master/audio_check.js"></script>
+        <script src="jsPsych-master/jspsych-image-keyboard-response.js"></script>
+        <script src="exp_basics.js"></script>
+        <script src="phase1_create2.js"></script>
+        <script src="phase2_create.js"></script>
+        <script src="phase3_create.js"></script>
+        <script src="js/serverComm.js" type="text/javascript"></script>
+        <script src="js_old/jquery.min.js"></script>
+        <link href="jsPsych-master/css/jspsych.css" rel="stylesheet" type="text/css"></link>
+
+
+    </head>
+    <body></body>
+    <script>
+
+
+
+
+
+//fixation to go in between each trial
+
+
+
+
+
+
+
+var pre_train_text1 = {
+              type:   "instructions",
+              pages:    [firstTrain],//invitation,consentForm,consentVoluntary,
+              show_clickable_nav: true,
+              timing_post_trial: transitionDelay,
+              data:{ subjectID:subjID,phase:1,assignedCond:condition_p1,conditOrder:JSON.stringify(conditOrder),stage:'train1',day:today,correctFurnitureSound:sounds_p1[catAudioRand_p1[0]],correctCarSound:sounds_p1[catAudioRand_p1[1]],
+              correctKitchenSound:sounds_p1[catAudioRand_p1[2]],correctDogSound:sounds_p1[catAudioRand_p1[3]],
+              correctInsectSound:sounds_p1[catAudioRand_p1[4]],correctClothesSound:sounds_p1[catAudioRand_p1[5]],
+              furnitureFreq:JSON.stringify(furnitureFreq),carFreq:JSON.stringify(carFreq),kitchenFreq:JSON.stringify(kitchenFreq),dogFreq:JSON.stringify(dogFreq),insectFreq:JSON.stringify(insectFreq),
+              clothesFreq:JSON.stringify(clothesFreq),furnitureInd:JSON.stringify(furnitureInd),carInd:JSON.stringify(carsInd),kitchenInd:JSON.stringify(kitchenInd),dogInd:JSON.stringify(dogInd),insectInd:JSON.stringify(insectInd),
+              clothesInd:JSON.stringify(clothesInd)},
+  };
+
+
+
+
+
+
+
+
+
+
+timeline2=[];
+timeline2.push(consent_block);
+timeline2.push(audio_check1)
+timeline2.push(pre_train_text1);
+
+
+
+
+
+// loop to create and push each trial into timeline
+
+nTrialsToAdd = trainMat_p1.length;
+//nTrialsToAdd = 1 // how many of the trials actually get pushed into the experiment
+
+
+for (i=0;i<nTrialsToAdd;i++){
+
+
+
+cur=trainMat_p1[i]
+
+rOrder = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder2 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder3 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+
+
+//swap image order on half of trials
+if (rOrder==2){
+
+[cur[0], cur[2]] = [cur[2], cur[0]];
+[cur[3], cur[5]] = [cur[5], cur[3]];
+}
+
+if (rOrder2==2){
+
+[cur[0], cur[4]] = [cur[4], cur[0]];
+}
+if (rOrder3==2){
+
+[cur[2], cur[4]] = [cur[4], cur[2]];
+[cur[1], cur[3]] = [cur[3], cur[1]];
+}
+
+
+
+
+var sound_object1 = {
+    obj_type: 'sound',
+    file: cur[1],
+    show_start_time: sound1_onset // from the trial start (ms)
+}
+
+var sound_object2 = {
+    obj_type: 'sound',
+    file: cur[3],
+    show_start_time: sound1_onset+sound_interval // from the trial start (ms)
+}
+
+var sound_object3 = {
+    obj_type: 'sound',
+    file: cur[5],
+    show_start_time: sound1_onset+sound_interval*2 // from the trial start (ms)
+}
+
+
+
+var image1 = {
+  obj_type: 'image',
+  file:cur[0],
+  scale:scale_ratio,
+  startX: canvas_width*(1/4), // location in the canvas
+
+};
+
+var image2 = {
+  obj_type: 'image',
+  file:cur[2],
+  scale:scale_ratio,
+  startX: canvas_width*(2/4), // location in the canvas
+
+};
+
+var image3 = {
+  obj_type: 'image',
+  file:cur[4],
+  scale:scale_ratio,
+  startX: canvas_width*(3/4), // location in the canvas
+
+};
+
+
+
+var train_trial_p1 = {
+    type: 'psychophysics',
+    stimuli: [image1,image2,image3,sound_object1,sound_object2,sound_object3,trainPrompt],
+    choices: [32,13,39], // The participant can respond to the stimuli using the 'y' or 'n' key.
+    response_start_time: sound1_onset+sound_interval+delay_response,
+    canvas_height: canvas_height,
+    canvas_width:canvas_width,
+    data:{ subjectID:subjID,phase:1,assignedCond:condition_p1,stage:'train1',day:today,image1: cur[0],image2:cur[2],image3:cur[4],sound1:cur[1],sound2:cur[3],sound3:cur[5]},
+}
+
+timeline2.push(train_trial_p1)
+timeline2.push(fixation1)
+
+}
+
+
+
+
+
+
+
+
+
+
+//code to create testing phase
+
+
+
+
+timeline2.push(pre_test_text1)
+
+
+
+
+//compile matrix of repeat test items (items seen in training)
+for (j=0;j<categoryN;j++){
+  for (i=0;i<trainN; i++)
+  {
+  temp3 = [];
+  temp3.push(furniture[furnitureInd[i]])
+  temp3.push(cars[carsInd[i]])
+  temp3.push(kitchen[kitchenInd[i]])
+  temp3.push(dogs[dogInd[i]])
+  temp3.push(insects[insectInd[i]])
+  temp3.push(clothes[clothesInd[i]])
+  shuffle(temp3) // randomize before adding sound and answer
+  temp3.push(sounds_p1[catAudioRand_p1[j]]) // sound is always 6th index
+  temp3.push(answerMat_p1[j]) //answer is always 7th index
+  temp3.push("test-repeat") //trial type is the 8th index
+  temp3.push(phase1_FreqMat[j][i]) //number of times the correct answer appeared in training
+
+  testRepeatMat_p1[(j*4)+i]=temp3;
+
+  }
+}
+shuffle(testRepeatMat_p1) // shuffles rows, keeps columns intact.
+
+
+//compile matrix of novel test items
+for (j=0;j<categoryN;j++){
+  for (i=0;i<novelN; i++)
+  {
+    temp3 = [];
+    temp3.push(furniture[furnitureInd[i+4]])
+    temp3.push(cars[carsInd[i+4]])
+    temp3.push(kitchen[kitchenInd[i+4]])
+    temp3.push(dogs[dogInd[i+4]])
+    temp3.push(insects[insectInd[i+4]])
+    temp3.push(clothes[clothesInd[i+4]])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p1[catAudioRand_p1[j]]) // sound is always 6th index
+    temp3.push(answerMat_p1[j]) //answer is always 7th index
+    temp3.push("test-novel") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase1_FreqMat[j]))//frequency type for the category
+
+    testNovelMat_p1[(j*2)+i]=temp3;
+
+  }
+}
+shuffle(testNovelMat_p1)
+
+
+//compile generalization matrix - order within each category was shuffled after loading.
+for (j=0;j<categoryN;j++){
+  for (i=0;i<genN; i++)
+  {
+    temp3 = [];
+    temp3.push(furnitureGen[i])
+    temp3.push(carsGen[i])
+    temp3.push(kitchenGen[i])
+    temp3.push(dogsGen[i])
+    temp3.push(insectsGen[i])
+    temp3.push(clothesGen[i])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p1[catAudioRand_p1[j]]) // sound is always 6th index
+    temp3.push(answerMat_p1[j]) //answer is always 7th index
+    temp3.push("test-gener") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase1_FreqMat[j]))//frequency type for the category
+
+    testGenMat_p1[(j*2)+i]=temp3
+  }
+}
+shuffle(testGenMat_p1)
+
+
+testMat_p1 = testRepeatMat_p1.concat(testNovelMat_p1,testGenMat_p1)
+
+
+
+//create a testMat with 6 images per trial, 1 from each category
+// for (i=0;i<nTest;i++){
+//   temp2  =[]; //hold image and sound file on each loop iteration.
+//
+//   temp2.push(furniture[i]);
+//   temp2.push(cars[i]);
+//   temp2.push(kitchen[i]);
+//   temp2.push(dogs[i]);
+//   temp2.push(insects[i]);
+//   temp2.push(clothes[i]);
+//   temp2.push(sounds[i]);
+//
+//   testMat[i]=temp2;
+//
+// }
+
+
+
+
+
+
+
+for (i=0;i<testMat_p1.length;i++){
+
+cur2=testMat_p1[i]
+
+
+
+  var image1 = {
+    obj_type: 'image',
+    file:cur2[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(1/8), // location in the canvas
+    startY:canvas_height/2,
+
+  };
+
+  var image2 = {
+    obj_type: 'image',
+    file:cur2[1],
+    scale:scale_ratio_test,
+    startX: canvas_width*(2/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image3 = {
+    obj_type: 'image',
+    file:cur2[2],
+    scale:scale_ratio_test,
+    startX: canvas_width*(3/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image4 = {
+    obj_type: 'image',
+    file:cur2[3],
+    scale:scale_ratio_test,
+    startX: canvas_width*(4/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image5 = {
+    obj_type: 'image',
+    file:cur2[4],
+    scale:scale_ratio_test,
+    startX: canvas_width*(5/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+  var image6 = {
+    obj_type: 'image',
+    file:cur2[5],
+    scale:scale_ratio_test,
+    startX: canvas_width*(6/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image7 = {
+    obj_type: 'image',
+    file:uncertain[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(7/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var test_sound = {
+      obj_type: 'sound',
+      file: cur2[6],
+      show_start_time: test_sound_start // from the trial start (ms)
+  }
+
+
+
+
+
+
+  var test_trial_p1 = {
+      type: 'psychophysics',
+      stimuli: [test_sound,image1,image2,image3,image4,image5,image6,image7,text1,text2,text3,text4,text5,text6,text7,testPrompt],
+      choices: ['1','2','3','4','5','6','7'], // number of response, corresponding to image
+      response_start_time: test_response_start,
+      canvas_height: 600,
+      data:{ subjectID:subjID,phase:1,assignedCond:condition_p1,trialType:cur2[8],stage:'test1',day:today,image1: cur2[0],image2:cur2[1],image3:cur2[2],image4:cur2[3],image5:cur2[4],image6:cur2[5],
+    test_sound:cur2[6],answer:cur2[7],answerFreq:cur2[9]},
+  }
+
+
+timeline2.push(test_trial_p1)
+timeline2.push(fixation1)
+}
+
+timeline2.push(post_test_text1)
+
+
+
+
+
+
+var pre_train_text2 = {
+        type: 'html-button-response',
+        stimulus: 'You are now beginning the second training phase of the experiment, '+
+        'you will see 2 images appear on the screen, and also hear 2 sounds played in random order. Pay attention to'+
+        ' the images and sounds, and after the 2nd sound plays, proceed to the next trial by pressing the spacebar.',
+        choices: ['Continue'],
+        data:{ subjectID:subjID,phase:2,assignedCond:condition_p2,conditOrder:JSON.stringify(conditOrder),stage:'train2',day:today,correctinstrumentSound:sounds_p2[catAudioRand_p2[0]],correctplantSound:sounds_p2[catAudioRand_p2[1]],
+        correcttoolsSound:sounds_p2[catAudioRand_p2[2]],correctbirdSound:sounds_p2[catAudioRand_p2[3]],
+        correctfruitSound:sounds_p2[catAudioRand_p2[4]],correctapplianceSound:sounds_p2[catAudioRand_p2[5]],
+        instrumentFreq:JSON.stringify(instrumentFreq),plantFreq:JSON.stringify(plantFreq),toolsFreq:JSON.stringify(toolsFreq),birdFreq:JSON.stringify(birdFreq),fruitFreq:JSON.stringify(fruitFreq),
+        applianceFreq:JSON.stringify(applianceFreq),instrumentInd:JSON.stringify(instrumentInd),plantInd:JSON.stringify(plantInd),toolsInd:JSON.stringify(toolsInd),birdInd:JSON.stringify(birdInd),fruitInd:JSON.stringify(fruitInd),
+        applianceInd:JSON.stringify(applianceInd)},
+  }
+
+
+timeline2.push(pre_train_text2)
+
+nTrialsToAdd = trainMat_p2.length;
+//nTrialsToAdd = 1 // how many of the trials actually get pushed into the experiment
+
+
+for (i=0;i<nTrialsToAdd;i++){
+
+
+
+cur=trainMat_p2[i]
+
+rOrder = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder2 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder3 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+
+
+//swap image order on half of trials
+if (rOrder==2){
+
+[cur[0], cur[2]] = [cur[2], cur[0]];
+[cur[3], cur[5]] = [cur[5], cur[3]];
+}
+
+if (rOrder2==2){
+
+[cur[0], cur[4]] = [cur[4], cur[0]];
+}
+if (rOrder3==2){
+
+[cur[2], cur[4]] = [cur[4], cur[2]];
+[cur[1], cur[3]] = [cur[3], cur[1]];
+}
+
+
+
+var sound_object1 = {
+    obj_type: 'sound',
+    file: cur[1],
+    show_start_time: sound1_onset // from the trial start (ms)
+}
+
+var sound_object2 = {
+    obj_type: 'sound',
+    file: cur[3],
+    show_start_time: sound1_onset+sound_interval // from the trial start (ms)
+}
+
+var sound_object3 = {
+    obj_type: 'sound',
+    file: cur[5],
+    show_start_time: sound1_onset+sound_interval*2 // from the trial start (ms)
+}
+
+
+
+var image1 = {
+  obj_type: 'image',
+  file:cur[0],
+  scale:scale_ratio,
+  startX: canvas_width*(1/4), // location in the canvas
+
+};
+
+var image2 = {
+  obj_type: 'image',
+  file:cur[2],
+  scale:scale_ratio,
+  startX: canvas_width*(2/4), // location in the canvas
+
+};
+
+var image3 = {
+  obj_type: 'image',
+  file:cur[4],
+  scale:scale_ratio,
+  startX: canvas_width*(3/4), // location in the canvas
+
+};
+
+
+
+var train_trial_p2 = {
+    type: 'psychophysics',
+    stimuli: [image1,image2,image3,sound_object1,sound_object2,sound_object3,trainPrompt],
+    choices: [32,13,39], // The participant can respond to the stimuli using the 'y' or 'n' key.
+    response_start_time: sound1_onset+sound_interval+delay_response,
+    canvas_height: canvas_height,
+    canvas_width:canvas_width,
+    data:{ subjectID:subjID,phase:2,assignedCond:condition_p1,stage:'train2',day:today,image1: cur[0],image2:cur[2],image3:cur[4],sound1:cur[1],sound2:cur[3],sound3:cur[5]},
+}
+
+timeline2.push(train_trial_p2)
+timeline2.push(fixation2)
+
+}
+
+
+
+
+
+
+
+
+
+
+//code to create testing phase
+
+
+
+
+timeline2.push(pre_test_text2)
+
+
+
+
+//compile matrix of repeat test items (items seen in training)
+for (j=0;j<categoryN;j++){
+  for (i=0;i<trainN; i++)
+  {
+  temp3 = [];
+  temp3.push(bird[birdInd[i]])
+  temp3.push(fruits[fruitInd[i]])
+  temp3.push(instrument[instrumentInd[i]])
+  temp3.push(appliance[applianceInd[i]])
+  temp3.push(tools[toolsInd[i]])
+  temp3.push(plant[plantInd[i]])
+  shuffle(temp3) // randomize before adding sound and answer
+  temp3.push(sounds_p2[catAudioRand_p2[j]]) // sound is always 6th index
+  temp3.push(answerMat_p2[j]) //answer is always 7th index
+  temp3.push("test-repeat") //trial type is the 8th index
+  temp3.push(phase2_FreqMat[j][i]) //number of times the correct answer appeared in training
+
+
+  testRepeatMat_p2[(j*4)+i]=temp3;
+
+  }
+}
+shuffle(testRepeatMat_p2) // shuffles rows, keeps columns intact.
+
+
+//compile matrix of novel test items
+for (j=0;j<categoryN;j++){
+  for (i=0;i<novelN; i++)
+  {
+    temp3 = [];
+    temp3.push(bird[birdInd[i+4]])
+    temp3.push(fruits[fruitInd[i+4]])
+    temp3.push(instrument[instrumentInd[i+4]])
+    temp3.push(appliance[applianceInd[i+4]])
+    temp3.push(tools[toolsInd[i+4]])
+    temp3.push(plant[plantInd[i+4]])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p2[catAudioRand_p2[j]]) // sound is always 6th index
+    temp3.push(answerMat_p2[j]) //answer is always 7th index
+    temp3.push("test-novel") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase2_FreqMat[j]))//frequency type for the category
+    testNovelMat_p2[(j*2)+i]=temp3;
+
+  }
+}
+shuffle(testNovelMat_p2)
+
+
+//compile generalization matrix - order within each category was shuffled after loading.
+for (j=0;j<categoryN;j++){
+  for (i=0;i<genN; i++)
+  {
+    temp3 = [];
+    temp3.push(birdGen[i])
+    temp3.push(fruitGen[i])
+    temp3.push(instrumentGen[i])
+    temp3.push(applianceGen[i])
+    temp3.push(toolsGen[i])
+    temp3.push(plantGen[i])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p2[catAudioRand_p2[j]]) // sound is always 6th index
+    temp3.push(answerMat_p2[j]) //answer is always 7th index
+    temp3.push("test-gener") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase2_FreqMat[j]))//frequency type for the category
+
+    testGenMat_p2[(j*2)+i]=temp3
+  }
+}
+shuffle(testGenMat_p2)
+
+
+testMat_p2 = testRepeatMat_p2.concat(testNovelMat_p2,testGenMat_p2)
+
+
+
+//create a testMat with 6 images per trial, 1 from each category
+// for (i=0;i<nTest;i++){
+//   temp2  =[]; //hold image and sound file on each loop iteration.
+//
+//   temp2.push(bird[i]);
+//   temp2.push(fruits[i]);
+//   temp2.push(instrument[i]);
+//   temp2.push(appliance[i]);
+//   temp2.push(tools[i]);
+//   temp2.push(plant[i]);
+//   temp2.push(sounds[i]);
+//
+//   testMat[i]=temp2;
+//
+// }
+
+
+
+
+
+
+
+for (i=0;i<testMat_p2.length;i++){
+
+cur2=testMat_p2[i]
+
+
+
+  var image1 = {
+    obj_type: 'image',
+    file:cur2[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(1/8), // location in the canvas
+    startY:canvas_height/2,
+
+  };
+
+  var image2 = {
+    obj_type: 'image',
+    file:cur2[1],
+    scale:scale_ratio_test,
+    startX: canvas_width*(2/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image3 = {
+    obj_type: 'image',
+    file:cur2[2],
+    scale:scale_ratio_test,
+    startX: canvas_width*(3/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image4 = {
+    obj_type: 'image',
+    file:cur2[3],
+    scale:scale_ratio_test,
+    startX: canvas_width*(4/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image5 = {
+    obj_type: 'image',
+    file:cur2[4],
+    scale:scale_ratio_test,
+    startX: canvas_width*(5/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+  var image6 = {
+    obj_type: 'image',
+    file:cur2[5],
+    scale:scale_ratio_test,
+    startX: canvas_width*(6/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image7 = {
+    obj_type: 'image',
+    file:uncertain[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(7/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var test_sound = {
+      obj_type: 'sound',
+      file: cur2[6],
+      show_start_time: test_sound_start // from the trial start (ms)
+  }
+
+
+
+
+
+
+  var test_trial_p2 = {
+      type: 'psychophysics',
+      stimuli: [test_sound,image1,image2,image3,image4,image5,image6,image7,text1,text2,text3,text4,text5,text6,text7,testPrompt],
+      choices: ['1','2','3','4','5','6','7'], // number of response, corresponding to image
+      response_start_time: test_response_start,
+      canvas_height: 600,
+      data:{ subjectID:subjID,phase:2,assignedCond:condition_p2,trialType:cur2[8],stage:'test2',day:today,image1: cur2[0],image2:cur2[1],image3:cur2[2],image4:cur2[3],image5:cur2[4],image6:cur2[5],
+    test_sound:cur2[6],answer:cur2[7],answerFreq:cur2[9]},
+  }
+
+
+timeline2.push(test_trial_p2)
+timeline2.push(fixation2)
+}
+
+timeline2.push(post_test_text2)
+
+
+
+
+
+var pre_train_text3 = {
+        type: 'html-button-response',
+        stimulus: 'You are now beginning the 3rd and final training phase of the experiment, '+
+        'you will see 2 images appear on the screen, and also hear 2 sounds played in random order. Pay attention to'+
+        ' the images and sounds, and after the 2nd sound plays, proceed to the next trial by pressing the spacebar.',
+        choices: ['Continue'],
+        data:{ subjectID:subjID,phase:3,assignedCond:condition_p3,conditOrder:JSON.stringify(conditOrder),stage:'train3',day:today,correctshipSound:sounds_p3[catAudioRand_p3[0]],correctvegetableSound:sounds_p3[catAudioRand_p3[1]],
+        correcttimeSound:sounds_p3[catAudioRand_p3[2]],correctfishSound:sounds_p3[catAudioRand_p3[3]],
+        correctlightSound:sounds_p3[catAudioRand_p3[4]],correctsportsSound:sounds_p3[catAudioRand_p3[5]],
+        shipFreq:JSON.stringify(shipFreq),vegetableFreq:JSON.stringify(vegetableFreq),timeFreq:JSON.stringify(timeFreq),fishFreq:JSON.stringify(fishFreq),lightFreq:JSON.stringify(lightFreq),
+        sportsFreq:JSON.stringify(sportsFreq),shipInd:JSON.stringify(shipInd),vegetableInd:JSON.stringify(vegetableInd),timeInd:JSON.stringify(timeInd),fishInd:JSON.stringify(fishInd),lightInd:JSON.stringify(lightInd),
+        sportsInd:JSON.stringify(sportsInd)},
+  }
+
+
+timeline2.push(pre_train_text3)
+
+
+
+
+
+
+
+nTrialsToAdd = trainMat_p3.length;
+//nTrialsToAdd = 1 // how many of the trials actually get pushed into the experiment
+
+
+for (i=0;i<nTrialsToAdd;i++){
+
+
+
+cur=trainMat_p3[i]
+
+rOrder = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder2 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+rOrder3 = Math.floor(Math.random()*2)+1; //random number 1 or 2
+
+
+//swap image order on half of trials
+if (rOrder==2){
+
+[cur[0], cur[2]] = [cur[2], cur[0]];
+[cur[3], cur[5]] = [cur[5], cur[3]];
+}
+
+if (rOrder2==2){
+
+[cur[0], cur[4]] = [cur[4], cur[0]];
+}
+if (rOrder3==2){
+
+[cur[2], cur[4]] = [cur[4], cur[2]];
+[cur[1], cur[3]] = [cur[3], cur[1]];
+}
+
+
+
+var sound_object1 = {
+    obj_type: 'sound',
+    file: cur[1],
+    show_start_time: sound1_onset // from the trial start (ms)
+}
+
+var sound_object2 = {
+    obj_type: 'sound',
+    file: cur[3],
+    show_start_time: sound1_onset+sound_interval // from the trial start (ms)
+}
+
+var sound_object3 = {
+    obj_type: 'sound',
+    file: cur[5],
+    show_start_time: sound1_onset+sound_interval*2 // from the trial start (ms)
+}
+
+
+
+var image1 = {
+  obj_type: 'image',
+  file:cur[0],
+  scale:scale_ratio,
+  startX: canvas_width*(1/4), // location in the canvas
+
+};
+
+var image2 = {
+  obj_type: 'image',
+  file:cur[2],
+  scale:scale_ratio,
+  startX: canvas_width*(2/4), // location in the canvas
+
+};
+
+var image3 = {
+  obj_type: 'image',
+  file:cur[4],
+  scale:scale_ratio,
+  startX: canvas_width*(3/4), // location in the canvas
+
+};
+
+
+
+var train_trial_p3 = {
+    type: 'psychophysics',
+    stimuli: [image1,image2,image3,sound_object1,sound_object2,sound_object3,trainPrompt],
+    choices: [32,13,39], // The participant can respond to the stimuli using the 'y' or 'n' key.
+    response_start_time: sound1_onset+sound_interval+delay_response,
+    canvas_height: canvas_height,
+    canvas_width:canvas_width,
+    data:{ subjectID:subjID,phase:3,assignedCond:condition_p1,stage:'train3',day:today,image1: cur[0],image2:cur[2],image3:cur[4],sound1:cur[1],sound2:cur[3],sound3:cur[5]},
+}
+
+timeline2.push(train_trial_p3)
+timeline2.push(fixation3)
+
+}
+
+
+
+
+
+
+
+
+
+
+//code to create testing phase
+
+
+
+
+timeline2.push(pre_test_text3)
+
+
+
+
+
+
+
+//compile matrix of repeat test items (items seen in training)
+for (j=0;j<categoryN;j++){
+  for (i=0;i<trainN; i++)
+  {
+  temp3 = [];
+  temp3.push(ship[shipInd[i]])
+  temp3.push(vegetable[vegetableInd[i]])
+  temp3.push(time[timeInd[i]])
+  temp3.push(fish[fishInd[i]])
+  temp3.push(light[lightInd[i]])
+  temp3.push(sports[sportsInd[i]])
+  shuffle(temp3) // randomize before adding sound and answer
+  temp3.push(sounds_p3[catAudioRand_p3[j]]) // sound is always 6th index
+  temp3.push(answerMat_p3[j]) //answer is always 7th index
+  temp3.push("test-repeat") //trial type is the 8th index
+  temp3.push(phase3_FreqMat[j][i]) //number of times the correct answer appeared in training
+
+
+  testRepeatMat_p3[(j*4)+i]=temp3;
+
+  }
+}
+shuffle(testRepeatMat_p3) // shuffles rows, keeps columns intact.
+
+
+//compile matrix of novel test items
+for (j=0;j<categoryN;j++){
+  for (i=0;i<novelN; i++)
+  {
+    temp3 = [];
+    temp3.push(ship[shipInd[i+4]])
+    temp3.push(vegetable[vegetableInd[i+4]])
+    temp3.push(time[timeInd[i+4]])
+    temp3.push(fish[fishInd[i+4]])
+    temp3.push(light[lightInd[i+4]])
+    temp3.push(sports[sportsInd[i+4]])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p3[catAudioRand_p3[j]]) // sound is always 6th index
+    temp3.push(answerMat_p3[j]) //answer is always 7th index
+    temp3.push("test-novel") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase3_FreqMat[j]))//frequency type for the category
+    testNovelMat_p3[(j*2)+i]=temp3;
+
+  }
+}
+shuffle(testNovelMat_p3)
+
+
+//compile generalization matrix - order within each category was shuffled after loading.
+for (j=0;j<categoryN;j++){
+  for (i=0;i<genN; i++)
+  {
+    temp3 = [];
+    temp3.push(shipGen[i])
+    temp3.push(vegetableGen[i])
+    temp3.push(timeGen[i])
+    temp3.push(fishGen[i])
+    temp3.push(lightGen[i])
+    temp3.push(sportsGen[i])
+    shuffle(temp3) // randomize before adding sound and answer
+    temp3.push(sounds_p3[catAudioRand_p3[j]]) // sound is always 6th index
+    temp3.push(answerMat_p3[j]) //answer is always 7th index
+    temp3.push("test-gener") //trial type is the 8th index
+    temp3.push(JSON.stringify(phase3_FreqMat[j]))//frequency type for the category
+
+    testGenMat_p3[(j*2)+i]=temp3
+  }
+}
+shuffle(testGenMat_p3)
+
+
+testMat_p3 = testRepeatMat_p3.concat(testNovelMat_p3,testGenMat_p3)
+
+
+
+//create a testMat with 6 images per trial, 1 from each category
+// for (i=0;i<nTest;i++){
+//   temp3  =[]; //hold image and sound file on each loop iteration.
+//
+//   temp3.push(ship[i]);
+//   temp3.push(vegetable[i]);
+//   temp3.push(time[i]);
+//   temp3.push(fish[i]);
+//   temp3.push(light[i]);
+//   temp3.push(sports[i]);
+//   temp3.push(sounds[i]);
+//
+//   testMat[i]=temp3;
+//
+// }
+
+
+
+
+
+
+
+for (i=0;i<testMat_p3.length;i++){
+
+cur2=testMat_p3[i]
+
+
+
+  var image1 = {
+    obj_type: 'image',
+    file:cur2[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(1/8), // location in the canvas
+    startY:canvas_height/2,
+
+  };
+
+  var image2 = {
+    obj_type: 'image',
+    file:cur2[1],
+    scale:scale_ratio_test,
+    startX: canvas_width*(2/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image3 = {
+    obj_type: 'image',
+    file:cur2[2],
+    scale:scale_ratio_test,
+    startX: canvas_width*(3/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image4 = {
+    obj_type: 'image',
+    file:cur2[3],
+    scale:scale_ratio_test,
+    startX: canvas_width*(4/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image5 = {
+    obj_type: 'image',
+    file:cur2[4],
+    scale:scale_ratio_test,
+    startX: canvas_width*(5/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+  var image6 = {
+    obj_type: 'image',
+    file:cur2[5],
+    scale:scale_ratio_test,
+    startX: canvas_width*(6/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var image7 = {
+    obj_type: 'image',
+    file:uncertain[0],
+    scale:scale_ratio_test,
+    startX: canvas_width*(7/8), // location in the canvas
+    startY:canvas_height/2,
+  };
+
+  var test_sound = {
+      obj_type: 'sound',
+      file: cur2[6],
+      show_start_time: test_sound_start // from the trial start (ms)
+  }
+
+
+
+
+
+
+  var test_trial_p3 = {
+      type: 'psychophysics',
+      stimuli: [test_sound,image1,image2,image3,image4,image5,image6,image7,text1,text2,text3,text4,text5,text6,text7,testPrompt],
+      choices: ['1','2','3','4','5','6','7'], // number of response, corresponding to image
+      response_start_time: test_response_start,
+      canvas_height: 600,
+      data:{ subjectID:subjID,phase:3,assignedCond:condition_p3,trialType:cur2[8],stage:'test3',day:today,image1: cur2[0],image2:cur2[1],image3:cur2[2],image4:cur2[3],image5:cur2[4],image6:cur2[5],
+    test_sound:cur2[6],answer:cur2[7],answerFreq:cur2[9]},
+  }
+
+
+timeline2.push(test_trial_p3)
+timeline2.push(fixation3)
+}
+
+timeline2.push(post_test_text3)
+
+
+
+// var save = {
+//   type: 'call-function',
+//   func: function(){
+//     serverComm.save_data(jsPsych.data.get().values());
+//   }
+// }
+
+
+function save_data(data) {
+
+
+    $.ajax({
+      type: 'post',
+      cache: false,
+      url: 'php_old/write_data.php',
+      data: {
+        "table": "csl_zipf_data",
+        "new_data": JSON.stringify(data)
+      }
+    });
+
+
+  }
+
+
+//to actually run the experiment
+jsPsych.init({
+    timeline: timeline2,
+    preload_images: [dogs,fruits,furniture,cars,clothes,insects,kitchen,dogsGen,furnitureGen,carsGen,clothesGen,insectsGen,kitchenGen,instrument,instrumentGen,plant,plantGen,tools,toolsGen,bird,birdGen,fruits,fruitGen,appliance,applianceGen,ship,shipGen,vegetable,vegetableGen,time,timeGen,fish,fishGen,light,lightGen,sports,sportsGen],
+    preload_audio: [sounds_p1,sounds_p2,sounds_p3],
+    on_finish: function(){save_data(jsPsych.data.get().values())}
+});
+
+
+</script>
+</html>
